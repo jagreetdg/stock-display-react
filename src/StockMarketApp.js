@@ -3,22 +3,26 @@ import axios from "axios";
 import { Line } from "react-chartjs-2";
 
 const StockMarketApp = () => {
-	const [stockData, setStockData] = useState(null);
-	const apiKey = "PJ8S8G4FXMPX85QF";
+	const [stockData, setStockData] = useState({});
+	const apiKey = "pk_7a667a6422b8422a9052ac0034005ac0";
+	const companies = ["AAPL", "MSFT", "TSLA", "AMZN", "META"];
 
-  useEffect(() => {
-		// Array of companies
-		const companies = ["AAPL", "MSFT", "TSLA", "AMZN", "META"];
+	useEffect(() => {
 		const fetchData = async () => {
 			try {
 				const stockData = {};
 
 				for (const company of companies) {
 					const response = await axios.get(
-						`https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${company}&interval=5min&apikey=${apiKey}`
+						`https://cloud.iexapis.com/stable/stock/${company}/chart/1m?token=${apiKey}`
 					);
-          console.log(response.data);
-					stockData[company] = response.data;
+
+					if (response.data && Array.isArray(response.data)) {
+						stockData[company] = response.data;
+						console.log(response.data);
+					} else {
+						console.error("No data available for", company);
+					}
 				}
 
 				setStockData(stockData);
@@ -28,64 +32,45 @@ const StockMarketApp = () => {
 		};
 
 		fetchData(); // Fetch data on the first page load
-	}, [apiKey]); // Dependencies for useEffect remain unchanged
+	}, [apiKey, companies]);
 
 	const renderChart = () => {
-		if (!stockData) {
+		if (!stockData || Object.keys(stockData).length === 0) {
 			return <div>Loading...</div>;
 		}
 
-		if (!stockData["Time Series (Daily)"]) {
+		const stockLabels = stockData[companies[0]].map(
+			(entry) => new Date(entry.date)
+		);
+
+		if (!stockLabels || stockLabels.length === 0) {
 			return <div>No stock data available.</div>;
 		}
 
-		const stockLabels = Object.keys(stockData["Time Series (Daily)"]);
-		const stockValues = Object.values(stockData["Time Series (Daily)"]).map(
-			(entry) => entry["1. open"]
-		);
+		const stockDatasets = companies.map((company) => ({
+			label: company,
+			data: stockData[company].map((entry) => entry.close),
+		}));
 
 		const chartData = {
 			labels: stockLabels,
-			datasets: [
-				{
-					label: "AAPL",
-					data: stockValues.map((entry) => entry.AAPL),
-					borderColor: "rgba(75, 192, 192, 1)",
-					fill: false,
-				},
-				{
-					label: "MSFT",
-					data: stockValues.map((entry) => entry.MSFT),
-					borderColor: "rgba(192, 75, 75, 1)",
-					fill: false,
-				},
-				{
-					label: "TSLA",
-					data: stockValues.map((entry) => entry.TSLA),
-					borderColor: "rgba(75, 75, 192, 1)",
-					fill: false,
-				},
-				{
-					label: "AMZN",
-					data: stockValues.map((entry) => entry.AMZN),
-					borderColor: "rgba(192, 192, 75, 1)",
-					fill: false,
-				},
-				{
-					label: "META",
-					data: stockValues.map((entry) => entry.META),
-					borderColor: "rgba(192, 75, 192, 1)",
-					fill: false,
-				},
-			],
+			datasets: stockDatasets,
 		};
 
-		const options = {
+		const chartOptions = {
+			scales: {
+				x: {
+					type: "time", // Use time scale for the x-axis
+				},
+				y: {
+					type: "linear", // Use linear scale for the y-axis
+				},
+			},
 			responsive: true,
 			maintainAspectRatio: false,
 		};
 
-		return <Line data={chartData} options={options} />;
+		return <Line data={chartData} options={chartOptions} />;
 	};
 
 	return (
