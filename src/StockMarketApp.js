@@ -1,82 +1,109 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Line } from "react-chartjs-2";
+import {
+	LineChart,
+	Line,
+	XAxis,
+	YAxis,
+	Tooltip,
+	Legend,
+	CartesianGrid,
+	ResponsiveContainer,
+} from "recharts";
 
 const StockMarketApp = () => {
 	const [stockData, setStockData] = useState({});
 	const apiKey = "pk_7a667a6422b8422a9052ac0034005ac0";
-	const companies = ["AAPL", "MSFT", "TSLA", "AMZN", "META"];
+	const maxRequestsPerMinute = 200; // Variable depending on Rate Limit of API Used
 
 	useEffect(() => {
-		const fetchData = async () => {
-			try {
-				const stockData = {};
+		const companies = [
+			{ symbol: "AAPL", color: "blue" },
+			{ symbol: "MSFT", color: "green" },
+			{ symbol: "TSLA", color: "red" },
+			{ symbol: "AMZN", color: "purple" },
+			{ symbol: "META", color: "orange" },
+		];
 
-				for (const company of companies) {
-					const response = await axios.get(
-						`https://cloud.iexapis.com/stable/stock/${company}/chart/1m?token=${apiKey}`
-					);
+		const interval = 60000 / maxRequestsPerMinute;
 
-					if (response.data && Array.isArray(response.data)) {
-						stockData[company] = response.data;
-						console.log(response.data);
-					} else {
-						console.error("No data available for", company);
-					}
+		const fetchData = async (company) => {
+      try {
+        //Data from IEX Cloud API
+				const response = await axios.get(
+					`https://cloud.iexapis.com/stable/stock/${company.symbol}/chart/1m?token=${apiKey}`
+				);
+
+				if (response.data && Array.isArray(response.data)) {
+					return {
+						company: company.symbol,
+						color: company.color,
+						data: response.data.map((entry) => ({
+							date: entry.date,
+							close: entry.close,
+						})),
+					};
+				} else {
+					console.error("No data available for", company.symbol);
+					return null;
 				}
-
-				setStockData(stockData);
 			} catch (error) {
-				console.error("Error fetching stock data:", error);
+				console.error(
+					"Error fetching stock data for",
+					company.symbol,
+					":",
+					error
+				);
+				return null;
 			}
 		};
 
-		fetchData(); // Fetch data on the first page load
-	}, [apiKey, companies]);
+		const fetchAllData = async () => {
+			const stockData = [];
 
-	const renderChart = () => {
-		if (!stockData || Object.keys(stockData).length === 0) {
-			return <div>Loading...</div>;
-		}
+			for (const company of companies) {
+				console.log(`Fetching data for : ${company.symbol}`);
+				const data = await fetchData(company);
+				if (data) {
+					stockData.push(data);
+					console.log(data);
+				}
+				await new Promise((resolve) => setTimeout(resolve, interval));
+			}
 
-		const stockLabels = stockData[companies[0]].map(
-			(entry) => new Date(entry.date)
-		);
-
-		if (!stockLabels || stockLabels.length === 0) {
-			return <div>No stock data available.</div>;
-		}
-
-		const stockDatasets = companies.map((company) => ({
-			label: company,
-			data: stockData[company].map((entry) => entry.close),
-		}));
-
-		const chartData = {
-			labels: stockLabels,
-			datasets: stockDatasets,
+			setStockData(stockData);
 		};
 
-		const chartOptions = {
-			scales: {
-				x: {
-					type: "time", // Use time scale for the x-axis
-				},
-				y: {
-					type: "linear", // Use linear scale for the y-axis
-				},
-			},
-			responsive: true,
-			maintainAspectRatio: false,
-		};
-
-		return <Line data={chartData} options={chartOptions} />;
-	};
+		fetchAllData();
+	}, [apiKey, maxRequestsPerMinute]);
 
 	return (
 		<div>
 			<h1>Stock Market Data</h1>
-			{renderChart()}
+			{stockData.length > 0 ? (
+				<ResponsiveContainer width="100%" height={400}>
+					<LineChart margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+						<XAxis dataKey="date" />
+						<YAxis />
+						<CartesianGrid strokeDasharray="3 3" />
+						<Tooltip />
+						<Legend />
+
+						{stockData.map((stock) => (
+							<Line
+								key={stock.company}
+								type="monotone"
+								dataKey="close"
+								name={stock.company}
+								stroke={stock.color}
+								data={stock.data}
+							/>
+						))}
+					</LineChart>
+				</ResponsiveContainer>
+			) : (
+				<div>Loading...</div>
+			)}
 		</div>
 	);
 };
